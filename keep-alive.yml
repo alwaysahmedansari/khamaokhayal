@@ -1,0 +1,16 @@
+# یہ فائل ریپو کے روٹ میں صرف نقل کے لیے رکھی ہے۔
+# GitHub میں Add file > Create new file کھولیں، نام میں یہ لکھیں:  .github/workflows/keep-alive.yml
+# پھر اس فائل کا پورا متن (اس سطر سے نیچے والا) پیسٹ کر کے Commit کریں۔
+name: keep-supabase-alive
+on:
+  schedule:
+    - cron: "0 6 * * 1,4"   # Monday and Thursday, 06:00 UTC
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read one row from the database
+        run: |
+          curl -fsS "https://mqhhpedpkddpifatmgtc.supabase.co/rest/v1/keep_alive?select=id&limit=1" \
+            -H "apikey: sb_publishable_L-KEAEVrx7-cEtP1xryU_w_Yt8qNcza"
