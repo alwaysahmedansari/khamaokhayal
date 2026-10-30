@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAFAF8">
+<title>لکھاری</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header></header>
+  <main id="m"><p class="mut">لوڈ ہو رہا ہے…</p></main>
+  <footer id="foot"></footer>
+</div>
+<script>
+const card = p => `<article class="card">
+  <a class="row" href="article.html?id=${p.id}">
+    <div><h2>${esc(p.title)}</h2><p class="ex">${esc(p.body.slice(0, 110))}…</p></div>
+    ${p.cover_url ? `<img class="th" src="${esc(p.cover_url)}" alt="">` : ""}
+  </a>
+  <div class="meta"><span class="chip">${esc(p.category)}</span><span>${fdate(p.published_at)} · ${mins(p.body)}</span>
+    <button class="ico" data-share="${p.id}" aria-label="شیئر کریں">${ICON.share}</button></div>
+</article>`;
+(async () => {
+  const L = layout("writers"), id = +new URLSearchParams(location.search).get("id");
+  const { data: a } = await sb.from("authors").select("id,name,bio,photo_url").eq("id", id).maybeSingle();
+  if (!a) { $("#m").innerHTML = '<p class="mut">یہ لکھاری نہیں ملا۔</p>'; return; }
+  const { data: ps } = await sb.from("posts").select("id,title,category,body,cover_url,published_at")
+    .eq("author_id", id).eq("status", "published").order("published_at", { ascending: false });
+  const list = ps || [];
+  $("#m").innerHTML = `<div class="pf"><div class="lg">${av(a)}</div>
+      <h1 class="ttl">${esc(a.name)}</h1><p class="ex">${esc(a.bio)}</p>
+      <div class="meta" style="margin-bottom:8px">${ud(list.length)} تحریریں</div>
+      <button class="b2" id="ps">پروفائل شیئر کریں</button></div>` +
+    (list.map(card).join("") || '<p class="mut">ابھی کوئی تحریر شائع نہیں ہوئی۔</p>');
+  $("#ps").onclick = () => share(location.href);
+  $("#m").onclick = e => { const b = e.target.closest("[data-share]"); if (b) share("article.html?id=" + b.dataset.share); };
+  await L; document.title = a.name + " — " + document.title;
+})();
+</script>
+</body>
+</html>

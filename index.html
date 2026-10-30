@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAFAF8">
+<title>خامہ و خیال</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header></header>
+  <label class="sr" for="q">تلاش</label>
+  <input id="q" class="search" type="search" placeholder="تحریریں اور لکھاری تلاش کریں">
+  <nav class="tabs" id="tabs"></nav>
+  <main id="feed"><p class="mut">لوڈ ہو رہا ہے…</p></main>
+  <footer id="foot"></footer>
+</div>
+<script>
+const CATS = ["تازہ", "کالم", "افسانہ", "مضمون", "شاعری"];
+let posts = [], cat = "تازہ";
+
+function tabs() {
+  $("#tabs").innerHTML = CATS.map(c => `<button class="${c === cat ? "on" : ""}" data-c="${c}">${c}</button>`).join("");
+}
+function card(p) {
+  const a = p.author || {};
+  return `<article class="card">
+    <a class="who" href="writer.html?id=${esc(a.id)}">${av(a)}<span>${esc(a.name)}</span><span class="mut">· ${fdate(p.published_at)}</span></a>
+    <a class="row" href="article.html?id=${p.id}">
+      <div><h2>${esc(p.title)}</h2><p class="ex">${esc(p.body.slice(0, 110))}…</p></div>
+      ${p.cover_url ? `<img class="th" src="${esc(p.cover_url)}" alt="">` : ""}
+    </a>
+    <div class="meta"><span class="chip">${esc(p.category)}</span><span>${mins(p.body)}</span>
+      <button class="ico" data-share="${p.id}" aria-label="شیئر کریں">${ICON.share}</button></div>
+  </article>`;
+}
+function draw() {
+  const q = $("#q").value.trim();
+  const list = posts.filter(p => (cat === "تازہ" || p.category === cat) && (!q || (p.title + (p.author ? p.author.name : "") + p.body).includes(q)));
+  $("#feed").innerHTML = list.length ? list.map(card).join("") : '<p class="mut">ابھی کوئی تحریر نہیں۔</p>';
+}
+async function load() {
+  const { data, error } = await sb.from("posts")
+    .select("id,title,category,body,cover_url,published_at,author:authors(id,name,photo_url)")
+    .eq("status", "published").order("published_at", { ascending: false }).limit(100);
+  if (error) { $("#feed").innerHTML = '<p class="mut">تحریریں لوڈ نہیں ہو سکیں۔</p>'; return; }
+  posts = data; draw();
+}
+$("#tabs").onclick = e => { const b = e.target.closest("[data-c]"); if (b) { cat = b.dataset.c; tabs(); draw(); } };
+$("#feed").onclick = e => { const b = e.target.closest("[data-share]"); if (b) share("article.html?id=" + b.dataset.share); };
+$("#q").oninput = draw;
+tabs(); layout("home"); load();
+</script>
+</body>
+</html>

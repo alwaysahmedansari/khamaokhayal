@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAFAF8">
+<title>تحریر</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header></header>
+  <main id="m"><p class="mut">لوڈ ہو رہا ہے…</p></main>
+  <footer id="foot"></footer>
+</div>
+<script>
+(async () => {
+  const L = layout("home"), id = +qid("id");
+  const { data: p } = await sb.from("posts")
+    .select("id,title,category,body,cover_url,published_at,author:authors(id,name,bio,photo_url)")
+    .eq("id", id).eq("status", "published").maybeSingle();
+  if (!p) { $("#m").innerHTML = '<p class="mut">یہ تحریر نہیں ملی۔</p>'; return; }
+  const a = p.author || {};
+  $("#m").innerHTML = `<a class="who" href="writer.html?id=${esc(a.id)}">${av(a)}<span>${esc(a.name)}</span></a>
+    <h1 class="ttl">${esc(p.title)}</h1>
+    <div class="meta"><span class="chip">${esc(p.category)}</span><span>${fdate(p.published_at)} · ${mins(p.body)}</span>
+      <button class="ico" id="sh" aria-label="شیئر کریں">${ICON.share}</button></div>
+    ${p.cover_url ? `<img class="cover" src="${esc(p.cover_url)}" alt="">` : ""}
+    <div class="body">${paras(p.body)}</div>
+    <a class="bio" href="writer.html?id=${esc(a.id)}" style="display:block;text-decoration:none">
+      <div class="who">${av(a)}<b>${esc(a.name)}</b></div><p>${esc(a.bio)}</p></a>`;
+  $("#sh").onclick = () => share(location.href);
+  await L; document.title = p.title + " — " + document.title;
+})();
+</script>
+</body>
+</html>

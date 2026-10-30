@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAFAF8">
+<title>تحریر بھیجیں</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header></header>
+  <h1 style="font-size:34px;font-weight:400;line-height:2;margin:8px 0 0">تحریر بھیجیں</h1>
+  <p class="mut" style="margin:0">لاگ اِن کی ضرورت نہیں۔ آپ کی تحریر مدیر کے پاس پہنچے گی، اور شائع ہونے سے پہلے ضرورت ہو تو وہ آپ سے ای میل پر رابطہ کریں گے۔</p>
+  <form class="f" id="f" autocomplete="off">
+    <h2 style="margin:24px 0 0;border-top:1px solid var(--line);padding-top:12px">آپ کے بارے میں</h2>
+    <label for="photo">آپ کی تصویر (اختیاری)</label><input id="photo" type="file" accept="image/jpeg,image/png,image/webp">
+    <label for="name">آپ کا نام</label><input id="name" type="text" maxlength="100" required>
+    <label for="email">ای میل</label><input id="email" type="email" maxlength="200" required>
+    <div class="hint">ای میل صرف مدیر کو دکھائی دے گی۔</div>
+    <label for="bio">آپ کا تعارف</label><textarea id="bio" rows="4" maxlength="1500" required></textarea>
+    <div class="hint">مختصر تعارف، جو آپ کی تحریر کے ساتھ دکھایا جائے گا۔</div>
+
+    <h2 style="margin:28px 0 0;border-top:1px solid var(--line);padding-top:12px">آپ کی تحریر</h2>
+    <label for="title">عنوان</label><input id="title" type="text" maxlength="200" required>
+    <label for="cat">زمرہ</label>
+    <select id="cat"><option>کالم</option><option>افسانہ</option><option>مضمون</option><option>شاعری</option></select>
+    <label for="cover">کور تصویر (اختیاری)</label><input id="cover" type="file" accept="image/jpeg,image/png,image/webp">
+    <div class="hint">یہی تصویر تحریر کے کارڈ پر دکھائی دے گی۔</div>
+    <label for="body">متن</label><textarea id="body" rows="12" maxlength="60000" required></textarea>
+    <div class="hint" id="wc">۰ الفاظ</div>
+
+    <input id="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
+    <div class="chk"><input id="ok" type="checkbox" required>
+      <label for="ok" style="margin:0">میں <a href="page.html?slug=privacy">پرائیویسی پالیسی</a> اور <a href="page.html?slug=guidelines">اشاعت کے اصول</a> سے متفق ہوں۔</label></div>
+    <button class="btn" id="go" type="submit" style="width:100%;margin-top:16px">بھیجیں</button>
+    <div id="msg" role="status"></div>
+  </form>
+  <footer id="foot"></footer>
+</div>
+<script>
+const MAX = 3 * 1024 * 1024;
+async function upload(file) {
+  if (!file) return null;
+  if (file.size > MAX) throw new Error("تصویر 3 MB سے چھوٹی ہونی چاہیے۔");
+  const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[file.type];
+  if (!ext) throw new Error("صرف jpg، png یا webp تصویر بھیجیں۔");
+  const path = `submissions/${crypto.randomUUID()}.${ext}`;
+  const { error } = await sb.storage.from("media").upload(path, file, { contentType: file.type });
+  if (error) throw error;
+  return sb.storage.from("media").getPublicUrl(path).data.publicUrl;
+}
+$("#body").oninput = e => { const n = e.target.value.trim().split(/\s+/).filter(Boolean).length; $("#wc").textContent = ud(n) + " الفاظ"; };
+$("#f").onsubmit = async e => {
+  e.preventDefault();
+  const msg = $("#msg"), go = $("#go");
+  if ($("#website").value) { msg.className = "ok"; msg.textContent = "شکریہ۔"; return; }   // spam trap
+  go.disabled = true; go.textContent = "بھیجا جا رہا ہے…"; msg.className = ""; msg.textContent = "";
+  try {
+    const [photo_url, cover_url] = await Promise.all([upload($("#photo").files[0]), upload($("#cover").files[0])]);
+    const { error } = await sb.from("submissions").insert({
+      name: $("#name").value.trim(), email: $("#email").value.trim(), bio: $("#bio").value.trim(),
+      title: $("#title").value.trim(), category: $("#cat").value, body: $("#body").value.trim(),
+      photo_url, cover_url
+    });
+    if (error) throw error;
+    $("#f").innerHTML = '<div class="ok">آپ کی تحریر موصول ہو گئی، شکریہ۔ مدیر اسے پڑھ کر آپ سے ای میل پر رابطہ کریں گے۔</div>';
+  } catch (err) {
+    msg.className = "err"; msg.textContent = (err && err.message && err.message.indexOf("MB") > -1) || (err && err.message && err.message.indexOf("jpg") > -1) ? err.message : "تحریر بھیجی نہیں جا سکی۔ دوبارہ کوشش کریں۔";
+    go.disabled = false; go.textContent = "بھیجیں";
+  }
+};
+layout("send");
+</script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAFAF8">
+<title>لکھاری</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header></header>
+  <main id="m"><p class="mut">لوڈ ہو رہا ہے…</p></main>
+  <footer id="foot"></footer>
+</div>
+<script>
+(async () => {
+  const L = layout("writers");
+  const [{ data: as }, { data: ps }] = await Promise.all([
+    sb.from("authors").select("id,name,bio,photo_url").order("name"),
+    sb.from("posts").select("author_id").eq("status", "published")
+  ]);
+  const n = {}; (ps || []).forEach(p => n[p.author_id] = (n[p.author_id] || 0) + 1);
+  const list = (as || []).filter(a => n[a.id]);
+  $("#m").innerHTML = `<h1 class="ttl">لکھاری</h1>` + (list.map(a =>
+    `<a class="wl" href="writer.html?id=${a.id}">${av(a)}<span style="flex:1">${esc(a.name)}</span><span class="mut" style="font-size:15px">${ud(n[a.id])} تحریریں</span></a>`
+  ).join("") || '<p class="mut">ابھی کوئی لکھاری نہیں۔</p>');
+  await L; document.title = "لکھاری — " + document.title;
+})();
+</script>
+</body>
+</html>

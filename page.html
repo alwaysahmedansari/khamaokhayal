@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAFAF8">
+<title>صفحہ</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header></header>
+  <main id="m"><p class="mut">لوڈ ہو رہا ہے…</p></main>
+  <footer id="foot"></footer>
+</div>
+<script>
+(async () => {
+  const L = layout(""), slug = new URLSearchParams(location.search).get("slug") || "";
+  const { data: g } = await sb.from("pages").select("title,body").eq("slug", slug).eq("visible", true).maybeSingle();
+  if (!g) { $("#m").innerHTML = '<p class="mut">یہ صفحہ نہیں ملا۔</p>'; return; }
+  $("#m").innerHTML = `<h1 class="ttl">${esc(g.title)}</h1><div class="body">${paras(g.body)}</div>`;
+  await L; document.title = g.title + " — " + document.title;
+})();
+</script>
+</body>
+</html>

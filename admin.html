@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAFAF8">
+<meta name="robots" content="noindex">
+<title>ایڈمن</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<style>
+.li{padding:10px 0;border-bottom:1px solid var(--line);min-height:56px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.b2,.bd{min-height:44px;padding:0 18px;border-radius:22px;background:none;font-size:17px;cursor:pointer}
+.b2{border:1px solid var(--ink);color:var(--ink)}.bd{border:1px solid #9B1C1C;color:#9B1C1C}
+.f input[type=password],.f input[type=number]{width:100%;min-height:52px;padding:0 12px;border:1px solid #6B7078;border-radius:16px;background:#fff;font-size:18px}
+.f small,.li small{font-size:15px}
+</style>
+</head>
+<body>
+<div class="wrap" style="padding-bottom:80px">
+  <header><a class="brand" href="index.html">ایڈمن</a></header>
+  <div id="v"></div>
+</div>
+<script>
+const V = $("#v"), CATS = ["کالم", "افسانہ", "مضمون", "شاعری"];
+const TABS = [["inbox", "ان باکس"], ["posts", "تحریریں"], ["authors", "لکھاری"], ["pages", "صفحات"], ["set", "سیٹنگز"]];
+const ST = { new: "نئی", reading: "زیرِ مطالعہ", returned: "واپس", approved: "شائع", rejected: "مسترد" };
+let tab = "inbox", authors = [];
+const an = id => (authors.find(a => a.id == id) || {}).name || "";
+const note = (m, e) => { const n = $("#msg"); if (n) { n.className = e ? "err" : "ok"; n.textContent = m; } };
+
+async function up(file) {                       // admin image upload -> public URL
+  if (!file) return null;
+  if (file.size > 3145728) throw new Error("تصویر 3 MB سے بڑی ہے۔");
+  const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[file.type];
+  if (!ext) throw new Error("صرف jpg، png یا webp تصویر۔");
+  const p = `admin/${crypto.randomUUID()}.${ext}`;
+  const { error } = await sb.storage.from("media").upload(p, file, { contentType: file.type });
+  if (error) throw error;
+  return sb.storage.from("media").getPublicUrl(p).data.publicUrl;
+}
+
+/* ---------- login ---------- */
+function login() {
+  V.innerHTML = `<form class="f" id="lf"><h2>ایڈمن لاگ اِن</h2>
+    <label for="e">ای میل</label><input id="e" type="email" required>
+    <label for="p">پاس ورڈ</label><input id="p" type="password" required>
+    <button class="btn" style="width:100%;margin-top:16px">لاگ اِن</button><div id="msg"></div></form>`;
+  $("#lf").onsubmit = async ev => {
+    ev.preventDefault();
+    const { error } = await sb.auth.signInWithPassword({ email: $("#e").value.trim(), password: $("#p").value });
+    error ? note("ای میل یا پاس ورڈ غلط ہے۔", 1) : start();
+  };
+}
+const out = async () => { await sb.auth.signOut(); login(); };
+async function start() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return login();
+  const { data } = await sb.from("admins").select("user_id");
+  if (!data || !data.length) { V.innerHTML = '<p class="err">یہ اکاؤنٹ ایڈمن نہیں ہے۔</p><button class="b2" onclick="out()">باہر نکلیں</button>'; return; }
+  shell();
+}
+
+/* ---------- shell and tabs ---------- */
+async function shell() {
+  const { data } = await sb.from("authors").select("id,name").order("name"); authors = data || [];
+  V.innerHTML = `<nav class="tabs">${TABS.map(([k, l]) => `<button data-t="${k}" class="${k == tab ? "on" : ""}">${l}</button>`).join("")}</nav><div id="c"></div>`;
+  $(".tabs").onclick = ev => { const b = ev.target.closest("[data-t]"); if (b) { tab = b.dataset.t; shell(); } };
+  show[tab]();
+}
+
+/* ---------- generic add / edit / delete for posts, authors, pages ---------- */
+const C = {
+  posts: { k: "id", o: "created_at", t: r => `${esc(r.title)}<br><small class="mut">${esc(an(r.author_id))} · ${r.status == "published" ? "شائع" : "مسودہ"}</small>`,
+    f: [["title", "عنوان"], ["author_id", "لکھاری", "author"], ["category", "زمرہ", "cat"], ["cover_url", "کور تصویر", "img"], ["body", "متن", "area"], ["status", "حالت", "status"]] },
+  authors: { k: "id", o: "name", t: r => esc(r.name),
+    f: [["name", "نام"], ["photo_url", "تصویر", "img"], ["bio", "تعارف", "area"]] },
+  pages: { k: "slug", o: "sort", t: r => `${esc(r.title)}<br><small class="mut" dir="ltr">${esc(r.slug)}</small>`,
+    f: [["slug", "لنک کا نام (انگریزی)"], ["title", "عنوان"], ["body", "متن", "area"], ["sort", "ترتیب", "num"], ["visible", "صفحہ ظاہر ہو", "check"]] }
+};
+const ls = t => async () => {
+  const { data } = await sb.from(t).select("*").order(C[t].o, { ascending: t != "posts" });
+  $("#c").innerHTML = `<button class="btn" data-n="1" style="margin:12px 0">+ نیا</button>` +
+    ((data || []).map(r => `<div class="li" data-k="${esc(r[C[t].k])}"><span>${C[t].t(r)}</span></div>`).join("") || '<p class="mut">ابھی کچھ نہیں۔</p>');
+  $("#c").onclick = ev => {
+    if (ev.target.closest("[data-n]")) return form(t, {});
+    const l = ev.target.closest("[data-k]"); if (l) form(t, data.find(r => String(r[C[t].k]) == l.dataset.k));
+  };
+};
+function form(t, row) {
+  const c = C[t], isNew = row[c.k] === undefined;
+  const fld = ([k, l, ty]) => {
+    const v = row[k] ?? (k == "visible" ? true : k == "status" ? "draft" : k == "category" ? "کالم" : k == "sort" ? 0 : "");
+    let h;
+    if (ty == "area") h = `<textarea id="f_${k}" rows="${k == "body" ? 14 : 5}">${esc(v)}</textarea>`;
+    else if (ty == "cat") h = `<select id="f_${k}">${CATS.map(x => `<option${x == v ? " selected" : ""}>${x}</option>`).join("")}</select>`;
+    else if (ty == "author") h = `<select id="f_${k}">${authors.map(a => `<option value="${a.id}"${a.id == v ? " selected" : ""}>${esc(a.name)}</option>`).join("")}</select>`;
+    else if (ty == "status") h = `<select id="f_${k}"><option value="draft"${v == "draft" ? " selected" : ""}>مسودہ</option><option value="published"${v == "published" ? " selected" : ""}>شائع</option></select>`;
+    else if (ty == "check") return `<label style="display:flex;gap:10px;align-items:center"><input id="f_${k}" type="checkbox"${v ? " checked" : ""}> ${l}</label>`;
+    else if (ty == "img") h = (v ? `<img src="${esc(v)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:16px;display:block"><label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" id="x_${k}"> موجودہ تصویر ہٹائیں</label>` : "") + `<input id="f_${k}" type="file" accept="image/jpeg,image/png,image/webp">`;
+    else h = `<input id="f_${k}" type="${ty == "num" ? "number" : "text"}" value="${esc(v)}"${k == "slug" && !isNew ? " readonly" : ""}>`;
+    return `<label for="f_${k}">${l}</label>${h}`;
+  };
+  V.innerHTML = `<form class="f" id="ef"><button type="button" class="b2" id="bk">‹ واپس</button>${c.f.map(fld).join("")}
+    <div style="display:flex;gap:10px;margin-top:20px"><button class="btn" style="flex:1">محفوظ کریں</button>${isNew ? "" : '<button type="button" class="bd" id="dl">حذف</button>'}</div><div id="msg"></div></form>`;
+  $("#bk").onclick = shell;
+  $("#ef").onsubmit = async ev => {
+    ev.preventDefault();
+    try {
+      const o = {};
+      for (const [k, , ty] of c.f) {
+        const el = $("#f_" + k);
+        if (ty == "img") { const f = el.files[0], x = $("#x_" + k); o[k] = f ? await up(f) : (x && x.checked ? null : row[k] || null); }
+        else if (ty == "check") o[k] = el.checked;
+        else if (ty == "num") o[k] = +el.value || 0;
+        else if (ty == "author") { o[k] = +el.value; if (!o[k]) throw new Error("پہلے لکھاری بنائیں۔"); }
+        else o[k] = el.value.trim();
+      }
+      const { error } = await (isNew ? sb.from(t).insert(o) : sb.from(t).update(o).eq(c.k, row[c.k]));
+      if (error) throw error;
+      shell();
+    } catch (x) { note(x.message || "محفوظ نہیں ہو سکا۔", 1); }
+  };
+  if (!isNew) $("#dl").onclick = async () => {
+    if (!confirm("کیا واقعی حذف کریں؟" + (t == "authors" ? " اس لکھاری کی تمام تحریریں بھی حذف ہو جائیں گی۔" : ""))) return;
+    const { error } = await sb.from(t).delete().eq(c.k, row[c.k]); error ? note(error.message, 1) : shell();
+  };
+}
+
+/* ---------- inbox: review what people sent ---------- */
+function sub(s) {
+  V.innerHTML = `<form class="f" id="sf"><button type="button" class="b2" id="bk">‹ واپس</button>
+    <h2 style="margin:12px 0 0">${esc(s.name)} <span class="chip">${ST[s.status]}</span></h2>
+    <div class="mut"><a href="mailto:${esc(s.email)}">${esc(s.email)}</a> · ${fdate(s.created_at)}</div>
+    ${s.photo_url ? `<img src="${esc(s.photo_url)}" alt="" style="width:80px;height:80px;border-radius:50%;object-fit:cover">` : ""}
+    <p>${esc(s.bio)}</p>
+    <label for="t">عنوان</label><input id="t" type="text" value="${esc(s.title)}">
+    <label for="c">زمرہ</label><select id="c">${CATS.map(x => `<option${x == s.category ? " selected" : ""}>${x}</option>`).join("")}</select>
+    ${s.cover_url ? `<label>کور تصویر</label><img src="${esc(s.cover_url)}" alt="" style="width:120px;height:120px;border-radius:16px;object-fit:cover">` : ""}
+    <label for="b">متن (آپ ایڈٹ کر سکتے ہیں)</label><textarea id="b" rows="14">${esc(s.body)}</textarea>
+    <label for="a">لکھاری</label><select id="a"><option value="new">نیا لکھاری بنائیں</option>${authors.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select>
+    <label for="n">لکھاری کے لیے نوٹ</label><textarea id="n" rows="3">${esc(s.admin_note || "")}</textarea>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:20px">
+      <button type="button" class="btn" id="pub"${s.status == "approved" ? " disabled" : ""}>شائع کریں</button>
+      <button type="button" class="b2" id="ret">واپس بھیجیں</button><button type="button" class="b2" id="rej">مسترد</button>
+      <button type="button" class="bd" id="del">حذف</button></div><div id="msg"></div></form>`;
+  $("#bk").onclick = shell;
+  const mark = async st => { const { error } = await sb.from("submissions").update({ status: st, admin_note: $("#n").value.trim() || null }).eq("id", s.id); if (error) throw error; };
+  $("#pub").onclick = async () => {
+    try {
+      let a = $("#a").value;
+      if (a == "new") {
+        const { data, error } = await sb.from("authors").insert({ name: s.name, bio: s.bio, photo_url: s.photo_url }).select("id").single();
+        if (error) throw error; a = data.id;
+      }
+      const { data: p, error: e2 } = await sb.from("posts").insert({ author_id: +a, title: $("#t").value.trim(), category: $("#c").value, body: $("#b").value.trim(), cover_url: s.cover_url, status: "published" }).select("id").single();
+      if (e2) throw e2;
+      const { error: e3 } = await sb.from("submissions").update({ status: "approved", author_id: +a, post_id: p.id, admin_note: $("#n").value.trim() || null }).eq("id", s.id);
+      if (e3) throw e3;
+      shell();
+    } catch (x) { note(x.message, 1); }
+  };
+  $("#ret").onclick = async () => { try { await mark("returned"); location.href = `mailto:${s.email}?subject=${encodeURIComponent("آپ کی تحریر: " + s.title)}&body=${encodeURIComponent($("#n").value)}`; } catch (x) { note(x.message, 1); } };
+  $("#rej").onclick = async () => { try { await mark("rejected"); shell(); } catch (x) { note(x.message, 1); } };
+  $("#del").onclick = async () => { if (confirm("یہ آمدہ تحریر حذف کریں؟")) { await sb.from("submissions").delete().eq("id", s.id); shell(); } };
+}
+
+const show = {
+  async inbox() {
+    const { data } = await sb.from("submissions").select("*").order("created_at", { ascending: false });
+    $("#c").innerHTML = (data || []).map(s => `<div class="li" data-id="${s.id}"><span>${esc(s.title)}<br><small class="mut">${esc(s.name)} · ${fdate(s.created_at)}</small></span><span class="chip">${ST[s.status]}</span></div>`).join("") || '<p class="mut">ابھی کوئی تحریر نہیں آئی۔</p>';
+    $("#c").onclick = ev => { const r = ev.target.closest("[data-id]"); if (r) sub(data.find(x => x.id == r.dataset.id)); };
+  },
+  posts: ls("posts"), authors: ls("authors"), pages: ls("pages"),
+  async set() {
+    const { data } = await sb.from("settings").select("value").eq("key", "site_name").maybeSingle();
+    $("#c").innerHTML = `<form class="f" id="sf2"><label for="sn">سائٹ کا نام</label><input id="sn" type="text" value="${esc(data ? data.value : "")}">
+      <button class="btn" style="width:100%;margin-top:16px">محفوظ کریں</button><div id="msg"></div></form>
+      <div style="display:flex;gap:10px;margin-top:28px"><button class="b2" id="bkp">بیک اپ ڈاؤن لوڈ کریں</button><button class="bd" id="lo">باہر نکلیں</button></div>`;
+    $("#sf2").onsubmit = async ev => { ev.preventDefault(); const { error } = await sb.from("settings").upsert({ key: "site_name", value: $("#sn").value.trim() }); note(error ? error.message : "محفوظ ہو گیا۔", !!error); };
+    $("#bkp").onclick = async () => {
+      const o = {}; for (const t of ["authors", "posts", "submissions", "pages", "settings"]) o[t] = (await sb.from(t).select("*")).data;
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(o, null, 1)], { type: "application/json" }));
+      a.download = "backup-" + new Date().toISOString().slice(0, 10) + ".json"; a.click();
+    };
+    $("#lo").onclick = out;
+  }
+};
+start();
+</script>
+</body>
+</html>
